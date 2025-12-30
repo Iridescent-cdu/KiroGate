@@ -820,7 +820,7 @@ def render_home_page() -> str:
     """Render the home page."""
     models_json = json.dumps(AVAILABLE_MODELS)
 
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -981,12 +981,17 @@ def render_home_page() -> str:
     }}
   </script>
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        COMMON_NAV=COMMON_NAV,
+        COMMON_FOOTER=COMMON_FOOTER,
+        models_json=models_json,
+    )
 
 
 def render_docs_page() -> str:
     """Render the API documentation page."""
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1178,7 +1183,11 @@ curl http://localhost:8000/v1/chat/completions \\
 
   {COMMON_FOOTER}
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        COMMON_NAV=COMMON_NAV,
+        COMMON_FOOTER=COMMON_FOOTER,
+    )
 
 
 def render_playground_page() -> str:
@@ -1187,7 +1196,7 @@ def render_playground_page() -> str:
         [f'<option value="{m}">{m}</option>' for m in AVAILABLE_MODELS]
     )
 
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1482,12 +1491,17 @@ def render_playground_page() -> str:
     }})();
   </script>
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        COMMON_NAV=COMMON_NAV,
+        COMMON_FOOTER=COMMON_FOOTER,
+        models_options=models_options,
+    )
 
 
 def render_deploy_page() -> str:
     """Render the deployment guide page."""
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1687,7 +1701,11 @@ fly deploy</pre>
 
   {COMMON_FOOTER}
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        COMMON_NAV=COMMON_NAV,
+        COMMON_FOOTER=COMMON_FOOTER,
+    )
 
 
 def render_status_page(status_data: dict) -> str:
@@ -1695,7 +1713,7 @@ def render_status_page(status_data: dict) -> str:
     status_color = "#10b981" if status_data.get("status") == "healthy" else "#ef4444"
     token_color = "#10b981" if status_data.get("token_valid") else "#ef4444"
 
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}
   <meta http-equiv="refresh" content="30">
@@ -1763,7 +1781,13 @@ def render_status_page(status_data: dict) -> str:
 
   {COMMON_FOOTER}
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        COMMON_NAV=COMMON_NAV,
+        status_color=status_color,
+        token_color=token_color,
+        COMMON_FOOTER=COMMON_FOOTER,
+    )
 
 
 def render_dashboard_page() -> str:
@@ -3908,7 +3932,7 @@ def render_user_page(user) -> str:
         user_info = ""
     user_info_html = f'<div class="mt-1">{user_info}</div>' if user_info else ""
 
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body data-self-use="{body_self_use_attr}">
@@ -5505,7 +5529,15 @@ def render_user_page(user) -> str:
     loadKeys();
   </script>
 </body>
-</html>"""
+</html>""".format(
+        COMMON_HEAD=COMMON_HEAD,
+        body_self_use_attr=body_self_use_attr,
+        COMMON_NAV=COMMON_NAV,
+        avatar_html=avatar_html,
+        display_name=display_name,
+        user_info_html=user_info_html,
+        COMMON_FOOTER=COMMON_FOOTER,
+    )
 
 
 def render_tokens_page(user=None) -> str:

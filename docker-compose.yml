@@ -16,13 +16,13 @@ services:
       - "8000:8000"
     environment:
       # 必填: 代理服务器密码
-      - PROXY_API_KEY=${PROXY_API_KEY:-changeme}
+      - PROXY_API_KEY=my-super-secret-password-123
 
       # 方式一: 使用 refresh token (推荐用于 Docker)
       - REFRESH_TOKEN=${REFRESH_TOKEN:-}
 
       # 方式二: 挂载凭证文件 (见下方 volumes)
-      - KIRO_CREDS_FILE=${KIRO_CREDS_FILE:-}
+      - KIRO_CREDS_FILE=/app/credentials.json
 
       # 可选配置
       - PROFILE_ARN=${PROFILE_ARN:-}
@@ -56,11 +56,17 @@ services:
       # 持久化统计数据
       - ./data:/app/data
       # 如果使用凭证文件，取消下面的注释
-      # - ~/.aws/sso/cache/kiro-auth-token.json:/app/credentials.json:ro
+      - ~/.aws/sso/cache/kiro-auth-token.json:/app/credentials.json:ro
       # 然后设置 KIRO_CREDS_FILE=/app/credentials.json
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
