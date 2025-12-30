@@ -14,7 +14,7 @@ import json
 PROXY_BASE = "https://proxy.jhun.edu.kg"
 
 # SEO and common head
-COMMON_HEAD = r'''
+COMMON_HEAD = r"""
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KiroGate - OpenAI & Anthropic 兼容的 Kiro API 代理网关</title>
@@ -556,9 +556,9 @@ COMMON_HEAD = r'''
       document.documentElement.setAttribute('data-theme', theme);
     }})();
   </script>
-'''
+"""
 
-COMMON_NAV = r'''
+COMMON_NAV = r"""
   <nav style="background: var(--bg-nav); border-bottom: 1px solid var(--border); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);" class="sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16">
@@ -779,9 +779,9 @@ COMMON_NAV = r'''
       }} catch {{}}
     }})();
   </script>
-'''
+"""
 
-COMMON_FOOTER = '''
+COMMON_FOOTER = """
   <footer style="background: var(--bg-card); border-top: 1px solid var(--border);" class="py-8 sm:py-10 mt-16 sm:mt-20">
     <div class="max-w-7xl mx-auto px-4">
       <div class="flex flex-col items-center">
@@ -811,7 +811,7 @@ COMMON_FOOTER = '''
       </div>
     </div>
   </footer>
-'''
+"""
 
 # 移除旧的 THEME_SCRIPT，已经集成到 COMMON_NAV 中
 
@@ -820,7 +820,7 @@ def render_home_page() -> str:
     """Render the home page."""
     models_json = json.dumps(AVAILABLE_MODELS)
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -920,11 +920,11 @@ def render_home_page() -> str:
 
   <script>
     // 等待 echarts 加载完成
-    function initModelsChart() {
-      if (typeof echarts === 'undefined') {
+    function initModelsChart() {{
+      if (typeof echarts === 'undefined') {{
         setTimeout(initModelsChart, 100);
         return;
-      }
+      }}
       const modelsChart = echarts.init(document.getElementById('modelsChart'));
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       modelsChart.setOption({{
@@ -971,22 +971,22 @@ def render_home_page() -> str:
       }}]
     }});
     window.addEventListener('resize', () => modelsChart.resize());
-    }
+    }}
 
     // 页面加载完成后初始化图表
-    if (document.readyState === 'loading') {
+    if (document.readyState === 'loading') {{
       document.addEventListener('DOMContentLoaded', initModelsChart);
-    } else {
+    }} else {{
       initModelsChart();
-    }
+    }}
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_docs_page() -> str:
     """Render the API documentation page."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1178,14 +1178,16 @@ curl http://localhost:8000/v1/chat/completions \\
 
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""
 
 
 def render_playground_page() -> str:
     """Render the API playground page."""
-    models_options = "".join([f'<option value="{m}">{m}</option>' for m in AVAILABLE_MODELS])
+    models_options = "".join(
+        [f'<option value="{m}">{m}</option>' for m in AVAILABLE_MODELS]
+    )
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1480,12 +1482,12 @@ def render_playground_page() -> str:
     }})();
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_deploy_page() -> str:
     """Render the deployment guide page."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -1685,7 +1687,7 @@ fly deploy</pre>
 
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""
 
 
 def render_status_page(status_data: dict) -> str:
@@ -1693,7 +1695,7 @@ def render_status_page(status_data: dict) -> str:
     status_color = "#10b981" if status_data.get("status") == "healthy" else "#ef4444"
     token_color = "#10b981" if status_data.get("token_valid") else "#ef4444"
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}
   <meta http-equiv="refresh" content="30">
@@ -1761,12 +1763,12 @@ def render_status_page(status_data: dict) -> str:
 
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""
 
 
 def render_dashboard_page() -> str:
     """Render the dashboard page with metrics."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}
 <style>
@@ -2021,12 +2023,12 @@ if (document.readyState === 'loading') {{
 }}
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_swagger_page() -> str:
     """Render the Swagger UI page."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>
   {COMMON_HEAD}
@@ -2076,15 +2078,19 @@ def render_swagger_page() -> str:
     }}
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_admin_login_page(error: str = "") -> str:
     """Render the admin login page."""
-    safe_error = html.escape(error) if error else ''
-    error_html = f'<div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">{safe_error}</div>' if safe_error else ''
+    safe_error = html.escape(error) if error else ""
+    error_html = (
+        f'<div class="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">{safe_error}</div>'
+        if safe_error
+        else ""
+    )
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
@@ -2148,12 +2154,12 @@ def render_admin_login_page(error: str = "") -> str:
     initTheme();
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_admin_page() -> str:
     """Render the admin dashboard page."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}
   <meta name="robots" content="noindex, nofollow">
@@ -3868,7 +3874,7 @@ def render_admin_page() -> str:
   </script>
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""
 
 
 def render_user_page(user) -> str:
@@ -3880,7 +3886,9 @@ def render_user_page(user) -> str:
 
     display_name_raw = user.username or "用户"
     display_name = html.escape(display_name_raw)
-    avatar_initial = html.escape(display_name_raw[0].upper() if display_name_raw else "👤")
+    avatar_initial = html.escape(
+        display_name_raw[0].upper() if display_name_raw else "👤"
+    )
     avatar_url = (user.avatar_url or "").strip()
     avatar_url_safe = ""
     if avatar_url.startswith(("http://", "https://")):
@@ -3897,10 +3905,10 @@ def render_user_page(user) -> str:
     elif user.linuxdo_id:
         user_info = f'<span style="color: var(--text-muted);">信任等级: Lv.{user.trust_level}</span>'
     else:
-        user_info = ''
-    user_info_html = f'<div class="mt-1">{user_info}</div>' if user_info else ''
+        user_info = ""
+    user_info_html = f'<div class="mt-1">{user_info}</div>' if user_info else ""
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body data-self-use="{body_self_use_attr}">
@@ -5497,7 +5505,7 @@ def render_user_page(user) -> str:
     loadKeys();
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_tokens_page(user=None) -> str:
@@ -5506,8 +5514,12 @@ def render_tokens_page(user=None) -> str:
 
     self_use_enabled = metrics.is_self_use_enabled()
     body_self_use_attr = "true" if self_use_enabled else "false"
-    login_section = '<a href="/user" class="btn-primary">用户中心</a>' if user else '<a href="/login" class="btn-primary">登录添加</a>'
-    return f'''<!DOCTYPE html>
+    login_section = (
+        '<a href="/user" class="btn-primary">用户中心</a>'
+        if user
+        else '<a href="/login" class="btn-primary">登录添加</a>'
+    )
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body data-self-use="{body_self_use_attr}">
@@ -5621,7 +5633,7 @@ def render_tokens_page(user=None) -> str:
     setInterval(loadPool, 30000);
   </script>
 </body>
-</html>'''
+</html>"""
 
 
 def render_login_page() -> str:
@@ -5630,7 +5642,7 @@ def render_login_page() -> str:
 
     self_use_enabled = metrics.is_self_use_enabled()
     body_self_use_attr = "true" if self_use_enabled else "false"
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}
   <style>
@@ -5714,12 +5726,12 @@ def render_login_page() -> str:
 
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""
 
 
 def render_404_page() -> str:
     """Render the 404 Not Found page."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="zh">
 <head>{COMMON_HEAD}</head>
 <body>
@@ -5758,4 +5770,4 @@ def render_404_page() -> str:
   </main>
   {COMMON_FOOTER}
 </body>
-</html>'''
+</html>"""

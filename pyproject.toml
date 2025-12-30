@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "kirogate"
+version = "0.1.0"
+description = "KiroGate backend service"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{ include = "kiro_gateway" }]
+
+[tool.poetry.scripts]
+start = "main:app"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = ">=0.104.0,<1.0.0"
+uvicorn = { version = ">=0.24.0,<1.0.0", extras = ["standard"] }
+httpx = ">=0.25.0,<1.0.0"
+loguru = ">=0.7.0,<1.0.0"
+requests = ">=2.31.0,<3.0.0"
+python-dotenv = ">=1.0.0,<2.0.0"
+tiktoken = ">=0.5.0,<1.0.0"
+pydantic-settings = ">=2.0.0,<3.0.0"
+slowapi = ">=0.1.9,<1.0.0"
+itsdangerous = ">=2.0.0,<3.0.0"
+python-multipart = ">=0.0.6,<1.0.0"
+cryptography = ">=41.0.0,<44.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
