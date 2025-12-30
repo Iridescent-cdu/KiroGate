@@ -28,6 +28,7 @@ Manages access token lifecycle:
 
 import asyncio
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -40,6 +41,7 @@ from kiro_gateway.config import (
     get_kiro_refresh_url,
     get_kiro_api_host,
     get_kiro_q_host,
+    get_oidc_token_url,
 )
 from kiro_gateway.utils import get_machine_fingerprint
 
@@ -74,7 +76,10 @@ class KiroAuthManager:
         refresh_token: Optional[str] = None,
         profile_arn: Optional[str] = None,
         region: str = "us-east-1",
-        creds_file: Optional[str] = None
+        creds_file: Optional[str] = None,
+        oidc_client_id: Optional[str] = None,
+        oidc_client_secret: Optional[str] = None,
+        use_oidc_refresh: bool = True,
     ):
         """
         Initialize authentication manager.
@@ -89,6 +94,16 @@ class KiroAuthManager:
         self._profile_arn = profile_arn
         self._region = region
         self._creds_file = creds_file
+        self._oidc_client_id = oidc_client_id
+        self._oidc_client_secret = oidc_client_secret
+        self._oidc_token_url = get_oidc_token_url(region)
+
+        if not (self._oidc_client_id and self._oidc_client_secret):
+            self._auto_load_oidc_client_from_cache()
+
+        self._use_oidc_refresh = use_oidc_refresh and bool(
+            self._oidc_client_id and self._oidc_client_secret
+        )
 
         self._access_token: Optional[str] = None
         self._expires_at: Optional[datetime] = None
@@ -109,7 +124,7 @@ class KiroAuthManager:
     @staticmethod
     def _is_url(path: str) -> bool:
         """Check if path is a URL."""
-        return path.startswith(('http://', 'https://'))
+        return path.startswith(("http://", "https://"))
 
     def _load_credentials_from_file(self, file_path: str) -> None:
         """
@@ -139,29 +154,31 @@ class KiroAuthManager:
                     logger.warning(f"Credentials file not found: {file_path}")
                     return
 
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 logger.info(f"Credentials loaded from file: {file_path}")
 
-            if 'refreshToken' in data:
-                self._refresh_token = data['refreshToken']
-            if 'accessToken' in data:
-                self._access_token = data['accessToken']
-            if 'profileArn' in data:
-                self._profile_arn = data['profileArn']
-            if 'region' in data:
-                self._region = data['region']
+            if "refreshToken" in data:
+                self._refresh_token = data["refreshToken"]
+            if "accessToken" in data:
+                self._access_token = data["accessToken"]
+            if "profileArn" in data:
+                self._profile_arn = data["profileArn"]
+            if "region" in data:
+                self._region = data["region"]
                 # Update URLs for new region
                 self._refresh_url = get_kiro_refresh_url(self._region)
                 self._api_host = get_kiro_api_host(self._region)
                 self._q_host = get_kiro_q_host(self._region)
 
             # Parse expiresAt
-            if 'expiresAt' in data:
+            if "expiresAt" in data:
                 try:
-                    expires_str = data['expiresAt']
-                    if expires_str.endswith('Z'):
-                        self._expires_at = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+                    expires_str = data["expiresAt"]
+                    if expires_str.endswith("Z"):
+                        self._expires_at = datetime.fromisoformat(
+                            expires_str.replace("Z", "+00:00")
+                        )
                     else:
                         self._expires_at = datetime.fromisoformat(expires_str)
                 except Exception as e:
@@ -178,7 +195,7 @@ class KiroAuthManager:
         self,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
-        profile_arn: Optional[str] = None
+        profile_arn: Optional[str] = None,
     ) -> None:
         """
         Save updated credentials to JSON file.
@@ -199,21 +216,25 @@ class KiroAuthManager:
             # Read existing data
             existing_data = {}
             if path.exists():
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, "r", encoding="utf-8") as f:
                     existing_data = json.load(f)
 
             # Update data with provided values or current values
-            existing_data['accessToken'] = access_token if access_token is not None else self._access_token
-            existing_data['refreshToken'] = refresh_token if refresh_token is not None else self._refresh_token
+            existing_data["accessToken"] = (
+                access_token if access_token is not None else self._access_token
+            )
+            existing_data["refreshToken"] = (
+                refresh_token if refresh_token is not None else self._refresh_token
+            )
             if self._expires_at:
-                existing_data['expiresAt'] = self._expires_at.isoformat()
+                existing_data["expiresAt"] = self._expires_at.isoformat()
             if profile_arn is not None:
-                existing_data['profileArn'] = profile_arn
+                existing_data["profileArn"] = profile_arn
             elif self._profile_arn:
-                existing_data['profileArn'] = self._profile_arn
+                existing_data["profileArn"] = self._profile_arn
 
             # Save
-            with open(path, 'w', encoding='utf-8') as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(existing_data, f, indent=2, ensure_ascii=False)
 
             logger.debug(f"Credentials saved to {self._creds_file}")
@@ -241,62 +262,157 @@ class KiroAuthManager:
         """
         Execute token refresh request with exponential backoff retry.
 
-        Sends POST request to Kiro API to obtain new access token.
-        Updates internal state and saves credentials to file.
-
-        Raises:
-            ValueError: If refresh token is not set or response lacks accessToken
-            httpx.HTTPError: On HTTP request error after all retries
+        Supports two strategies:
+        - OIDC (AWS SSO) token endpoint (default if OIDC client configured)
+        - Legacy Kiro refresh endpoint
         """
         if not self._refresh_token:
             raise ValueError("Refresh token is not set")
 
-        logger.info("Refreshing Kiro token...")
+        if self._use_oidc_refresh:
+            data = await self._refresh_token_request_oidc()
+        else:
+            data = await self._refresh_token_request_kiro()
 
-        payload = {'refreshToken': self._refresh_token}
+        self._apply_refresh_response(data)
+
+    def _auto_load_oidc_client_from_cache(
+        self, cache_dir: Optional[str] = None
+    ) -> None:
+        """
+        Auto-load OIDC clientId/clientSecret from AWS SSO cache if not provided.
+
+        Scans ~/.aws/sso/cache/*.json (or provided cache_dir) for clientId/clientSecret,
+        preferring the most recently modified file.
+        """
+        try:
+            base_dir = Path(cache_dir) if cache_dir else Path.home() / ".aws/sso/cache"
+            if not base_dir.exists():
+                return
+
+            files = sorted(
+                base_dir.glob("*.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for f in files:
+                try:
+                    with open(f, "r", encoding="utf-8") as fp:
+                        data = json.load(fp)
+                    cid = data.get("clientId")
+                    csec = data.get("clientSecret")
+                    if cid and csec:
+                        self._oidc_client_id = cid
+                        self._oidc_client_secret = csec
+                        logger.info(f"Loaded OIDC clientId/clientSecret from {f}")
+                        return
+                except Exception as inner:
+                    logger.debug(f"Skip cache file {f}: {inner}")
+        except Exception as e:
+            logger.warning(f"Failed to auto load OIDC client from cache: {e}")
+
+    async def _refresh_token_request_kiro(self) -> dict:
+        """Refresh via Kiro refreshToken endpoint."""
+        logger.info("Refreshing Kiro token (legacy endpoint)...")
+
+        payload = {"refreshToken": self._refresh_token}
         headers = {
             "Content-Type": "application/json",
             "User-Agent": f"KiroGateway-{self._fingerprint[:16]}",
         }
 
-        # 指数退避重试配置
         max_retries = 3
-        base_delay = 1.0  # 初始延迟1秒
+        base_delay = 1.0
         last_error = None
 
         for attempt in range(max_retries):
             try:
                 async with httpx.AsyncClient(timeout=30) as client:
-                    response = await client.post(self._refresh_url, json=payload, headers=headers)
+                    response = await client.post(
+                        self._refresh_url, json=payload, headers=headers
+                    )
                     response.raise_for_status()
-                    data = response.json()
-                break  # 成功，退出重试循环
+                    return response.json()
             except httpx.HTTPStatusError as e:
                 last_error = e
                 if e.response.status_code in (429, 500, 502, 503, 504):
-                    # 可重试的错误
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.warning(
                         f"Token refresh failed (attempt {attempt + 1}/{max_retries}): "
                         f"HTTP {e.response.status_code}, retrying in {delay}s"
                     )
                     await asyncio.sleep(delay)
                 else:
-                    # 不可重试的客户端错误 (4xx except 429)
                     raise
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_error = e
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.warning(
                     f"Token refresh failed (attempt {attempt + 1}/{max_retries}): "
                     f"{type(e).__name__}, retrying in {delay}s"
                 )
                 await asyncio.sleep(delay)
-        else:
-            # 所有重试都失败
-            logger.error(f"Token refresh failed after {max_retries} attempts")
-            raise last_error
 
+        logger.error(f"Token refresh failed after {max_retries} attempts")
+        raise last_error
+
+    async def _refresh_token_request_oidc(self) -> dict:
+        """Refresh via AWS SSO OIDC token endpoint using refresh_token grant."""
+        if not self._oidc_client_id or not self._oidc_client_secret:
+            raise ValueError("OIDC clientId/clientSecret not set")
+
+        url = self._oidc_token_url or get_oidc_token_url(self._region)
+        payload = {
+            "clientId": self._oidc_client_id,
+            "clientSecret": self._oidc_client_secret,
+            "grantType": "refresh_token",
+            "refreshToken": self._refresh_token,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": f"aws-sdk-js/3.x KiroGateway-{self._fingerprint[:16]}",
+            "x-amz-user-agent": f"aws-sdk-js/3.x KiroGateway-{self._fingerprint[:16]}",
+            "amz-sdk-invocation-id": str(uuid.uuid4()),
+            "amz-sdk-request": "attempt=1; max=4",
+        }
+
+        max_retries = 3
+        base_delay = 1.0
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if e.response.status_code in (429, 500, 502, 503, 504):
+                    delay = base_delay * (2**attempt)
+                    logger.warning(
+                        f"OIDC token refresh failed (attempt {attempt + 1}/{max_retries}): "
+                        f"HTTP {e.response.status_code}, retrying in {delay}s"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                last_error = e
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    f"OIDC token refresh failed (attempt {attempt + 1}/{max_retries}): "
+                    f"{type(e).__name__}, retrying in {delay}s"
+                )
+                await asyncio.sleep(delay)
+
+        logger.error(f"OIDC token refresh failed after {max_retries} attempts")
+        raise last_error
+
+    def _apply_refresh_response(self, data: dict) -> None:
+        """
+        Apply refresh response to internal state and persist credentials.
+        """
         new_access_token = data.get("accessToken")
         new_refresh_token = data.get("refreshToken")
         expires_in = data.get("expiresIn", 3600)
@@ -305,17 +421,15 @@ class KiroAuthManager:
         if not new_access_token:
             raise ValueError(f"Response does not contain accessToken: {data}")
 
-        # Calculate expiration time with buffer (minus 60 seconds)
         now = datetime.now(timezone.utc).replace(microsecond=0)
         new_expires_at = datetime.fromtimestamp(
-            now.timestamp() + expires_in - 60,
-            tz=timezone.utc
+            now.timestamp() + expires_in - 60, tz=timezone.utc
         )
 
-        # Save to file first (before updating state)
-        self._save_credentials_to_file(new_access_token, new_refresh_token, new_profile_arn)
+        self._save_credentials_to_file(
+            new_access_token, new_refresh_token, new_profile_arn
+        )
 
-        # Update all state atomically after all operations succeed
         self._access_token = new_access_token
         if new_refresh_token:
             self._refresh_token = new_refresh_token

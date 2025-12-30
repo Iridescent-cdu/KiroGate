@@ -50,7 +50,11 @@ from kiro_gateway.auth import KiroAuthManager
 from kiro_gateway.cache import ModelInfoCache
 from kiro_gateway.routes import router, limiter, rate_limit_handler
 from kiro_gateway.exceptions import validation_exception_handler
-from kiro_gateway.middleware import RequestTrackingMiddleware, MetricsMiddleware, SiteGuardMiddleware
+from kiro_gateway.middleware import (
+    RequestTrackingMiddleware,
+    MetricsMiddleware,
+    SiteGuardMiddleware,
+)
 from kiro_gateway.http_client import close_global_http_client
 
 
@@ -60,7 +64,7 @@ logger.add(
     sys.stderr,
     level=settings.log_level,
     colorize=True,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
 )
 
 
@@ -84,7 +88,9 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
 
 
 def setup_logging_intercept():
@@ -144,7 +150,7 @@ def validate_configuration() -> None:
 
     # 检查凭证文件是否实际存在（URL 跳过本地路径检查）
     if settings.kiro_creds_file:
-        is_url = settings.kiro_creds_file.startswith(('http://', 'https://'))
+        is_url = settings.kiro_creds_file.startswith(("http://", "https://"))
         if not is_url:
             creds_path = Path(settings.kiro_creds_file).expanduser()
             if not creds_path.exists():
@@ -158,29 +164,39 @@ def validate_configuration() -> None:
         logger.error("  CONFIGURATION ERROR")
         logger.error("=" * 60)
         for error in errors:
-            for line in error.split('\n'):
+            for line in error.split("\n"):
                 logger.error(f"  {line}")
         logger.error("=" * 60)
         logger.error("")
         sys.exit(1)
 
     # 记录配置模式
-    config_source = "environment variables" if not Path(".env").exists() else ".env file"
+    config_source = (
+        "environment variables" if not Path(".env").exists() else ".env file"
+    )
 
     if has_refresh_token or has_creds_file:
         # 简单模式：服务器配置了 REFRESH_TOKEN
         if settings.kiro_creds_file:
-            if settings.kiro_creds_file.startswith(('http://', 'https://')):
-                logger.info(f"Using credentials from URL: {settings.kiro_creds_file} (via {config_source})")
+            if settings.kiro_creds_file.startswith(("http://", "https://")):
+                logger.info(
+                    f"Using credentials from URL: {settings.kiro_creds_file} (via {config_source})"
+                )
             else:
-                logger.info(f"Using credentials file: {settings.kiro_creds_file} (via {config_source})")
+                logger.info(
+                    f"Using credentials file: {settings.kiro_creds_file} (via {config_source})"
+                )
         elif settings.refresh_token:
             logger.info(f"Using refresh token (via {config_source})")
-        logger.info("Auth mode: Simple mode (server-configured REFRESH_TOKEN) + Multi-tenant mode supported")
+        logger.info(
+            "Auth mode: Simple mode (server-configured REFRESH_TOKEN) + Multi-tenant mode supported"
+        )
     else:
         # 仅组合模式：用户在请求中传递 REFRESH_TOKEN
         logger.info("No REFRESH_TOKEN configured - running in multi-tenant only mode")
-        logger.info("Auth mode: Multi-tenant only (users must provide PROXY_API_KEY:REFRESH_TOKEN)")
+        logger.info(
+            "Auth mode: Multi-tenant only (users must provide PROXY_API_KEY:REFRESH_TOKEN)"
+        )
         logger.info("Tip: Configure REFRESH_TOKEN to enable simple mode authentication")
 
 
@@ -206,14 +222,19 @@ async def lifespan(app: FastAPI):
     debug_dir.mkdir(parents=True, exist_ok=True)
 
     # 检查是否配置了全局凭证
-    has_global_credentials = bool(settings.refresh_token) or bool(settings.kiro_creds_file)
+    has_global_credentials = bool(settings.refresh_token) or bool(
+        settings.kiro_creds_file
+    )
 
     # 创建全局 AuthManager（简单模式使用）
     auth_manager = KiroAuthManager(
         refresh_token=settings.refresh_token,
         profile_arn=settings.profile_arn,
         region=settings.region,
-        creds_file=settings.kiro_creds_file if settings.kiro_creds_file else None
+        creds_file=settings.kiro_creds_file if settings.kiro_creds_file else None,
+        oidc_client_id=settings.oidc_client_id,
+        oidc_client_secret=settings.oidc_client_secret,
+        use_oidc_refresh=True,
     )
     app.state.auth_manager = auth_manager
 
@@ -232,13 +253,18 @@ async def lifespan(app: FastAPI):
             logger.info("Performing initial model cache population...")
             await model_cache.refresh()
     else:
-        logger.warning("No global credentials configured - model cache refresh disabled")
-        logger.warning("Simple mode authentication will not work, only multi-tenant mode available")
+        logger.warning(
+            "No global credentials configured - model cache refresh disabled"
+        )
+        logger.warning(
+            "Simple mode authentication will not work, only multi-tenant mode available"
+        )
 
     logger.info("Application startup complete.")
 
     # Start token health checker (for user token pool)
     from kiro_gateway.health_checker import health_checker
+
     await health_checker.start()
 
     yield
@@ -265,7 +291,7 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
     docs_url=None,  # 禁用默认的 /docs，使用自定义页面
-    redoc_url=None  # 禁用默认的 /redoc
+    redoc_url=None,  # 禁用默认的 /redoc
 )
 
 # 添加中间件（顺序很重要：最后添加的最先执行）
@@ -287,6 +313,7 @@ async def not_found_handler(request: Request, exc):
     """Handle 404 errors with a custom page."""
     from fastapi.responses import HTMLResponse
     from kiro_gateway.pages import render_404_page
+
     return HTMLResponse(content=render_404_page(), status_code=404)
 
 
@@ -308,7 +335,11 @@ UVICORN_LOG_CONFIG = {
     "loggers": {
         "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
         "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
-        "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {
+            "handlers": ["default"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
 
@@ -316,6 +347,7 @@ UVICORN_LOG_CONFIG = {
 # --- 入口点 ---
 if __name__ == "__main__":
     import uvicorn
+
     logger.info("Starting Uvicorn server...")
 
     uvicorn.run(

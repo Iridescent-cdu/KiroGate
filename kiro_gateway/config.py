@@ -68,6 +68,7 @@ def _get_raw_env_value(var_name: str, env_file: str = ".env") -> Optional[str]:
     except (re.error, ValueError) as e:
         # Regex or parsing errors - log but don't fail
         from loguru import logger
+
         logger.debug(f"Error parsing env file for {var_name}: {e}")
 
     return None
@@ -109,6 +110,10 @@ class Settings(BaseSettings):
     # 凭证文件路径（可选，作为 .env 的替代）
     kiro_creds_file: str = Field(default="", alias="KIRO_CREDS_FILE")
 
+    # OIDC 认证（AWS SSO）配置
+    oidc_client_id: str = Field(default="", alias="OIDC_CLIENT_ID")
+    oidc_client_secret: str = Field(default="", alias="OIDC_CLIENT_SECRET")
+
     # ==================================================================================================
     # Token 设置
     # ==================================================================================================
@@ -142,7 +147,9 @@ class Settings(BaseSettings):
 
     # Tool description 最大长度（字符）
     # 超过此限制的描述将被移至 system prompt
-    tool_description_max_length: int = Field(default=10000, alias="TOOL_DESCRIPTION_MAX_LENGTH")
+    tool_description_max_length: int = Field(
+        default=10000, alias="TOOL_DESCRIPTION_MAX_LENGTH"
+    )
 
     # ==================================================================================================
     # 日志设置
@@ -195,7 +202,9 @@ class Settings(BaseSettings):
     # 慢模型的超时倍数
     # 对于 Opus 等慢模型，超时时间会乘以这个倍数
     # 建议设置为 3.0-4.0，因为慢模型处理大文档时可能需要更长时间
-    slow_model_timeout_multiplier: float = Field(default=3.0, alias="SLOW_MODEL_TIMEOUT_MULTIPLIER")
+    slow_model_timeout_multiplier: float = Field(
+        default=3.0, alias="SLOW_MODEL_TIMEOUT_MULTIPLIER"
+    )
 
     # ==================================================================================================
     # 自动分片配置（长文档处理）
@@ -221,7 +230,9 @@ class Settings(BaseSettings):
     admin_password: str = Field(default="admin123", alias="ADMIN_PASSWORD")
 
     # Admin Session 签名密钥（请在生产环境中更改）
-    admin_secret_key: str = Field(default="kirogate_admin_secret_key_change_me", alias="ADMIN_SECRET_KEY")
+    admin_secret_key: str = Field(
+        default="kirogate_admin_secret_key_change_me", alias="ADMIN_SECRET_KEY"
+    )
 
     # Admin Session 有效期（秒）
     admin_session_max_age: int = Field(default=86400, alias="ADMIN_SESSION_MAX_AGE")
@@ -237,7 +248,9 @@ class Settings(BaseSettings):
     cookie_secure: Optional[bool] = Field(default=None, alias="COOKIE_SECURE")
 
     # OAuth 临时 state cookie 的 SameSite 策略
-    oauth_state_cookie_samesite: str = Field(default="lax", alias="OAUTH_STATE_COOKIE_SAMESITE")
+    oauth_state_cookie_samesite: str = Field(
+        default="lax", alias="OAUTH_STATE_COOKIE_SAMESITE"
+    )
 
     # 是否启用 CSRF 保护（仅管理/用户端接口）
     csrf_enabled: bool = Field(default=True, alias="CSRF_ENABLED")
@@ -253,7 +266,9 @@ class Settings(BaseSettings):
     oauth_client_secret: str = Field(default="", alias="OAUTH_CLIENT_SECRET")
 
     # OAuth2 Redirect URI
-    oauth_redirect_uri: str = Field(default="http://localhost:8000/oauth2/callback", alias="OAUTH_REDIRECT_URI")
+    oauth_redirect_uri: str = Field(
+        default="http://localhost:8000/oauth2/callback", alias="OAUTH_REDIRECT_URI"
+    )
 
     # ==================================================================================================
     # OAuth2 GitHub 配置
@@ -266,14 +281,19 @@ class Settings(BaseSettings):
     github_client_secret: str = Field(default="", alias="GITHUB_CLIENT_SECRET")
 
     # GitHub OAuth2 Redirect URI
-    github_redirect_uri: str = Field(default="http://localhost:8000/oauth2/github/callback", alias="GITHUB_REDIRECT_URI")
+    github_redirect_uri: str = Field(
+        default="http://localhost:8000/oauth2/github/callback",
+        alias="GITHUB_REDIRECT_URI",
+    )
 
     # ==================================================================================================
     # 用户系统配置
     # ==================================================================================================
 
     # 用户 Session 签名密钥
-    user_session_secret: str = Field(default="kirogate_user_secret_change_me", alias="USER_SESSION_SECRET")
+    user_session_secret: str = Field(
+        default="kirogate_user_secret_change_me", alias="USER_SESSION_SECRET"
+    )
 
     # 用户 Session 有效期（秒），默认7天
     user_session_max_age: int = Field(default=604800, alias="USER_SESSION_MAX_AGE")
@@ -282,10 +302,14 @@ class Settings(BaseSettings):
     user_cookie_samesite: str = Field(default="lax", alias="USER_COOKIE_SAMESITE")
 
     # Token 加密密钥（32字节）
-    token_encrypt_key: str = Field(default="kirogate_token_encrypt_key_32b!", alias="TOKEN_ENCRYPT_KEY")
+    token_encrypt_key: str = Field(
+        default="kirogate_token_encrypt_key_32b!", alias="TOKEN_ENCRYPT_KEY"
+    )
 
     # Token 健康检查间隔（秒）
-    token_health_check_interval: int = Field(default=3600, alias="TOKEN_HEALTH_CHECK_INTERVAL")
+    token_health_check_interval: int = Field(
+        default=3600, alias="TOKEN_HEALTH_CHECK_INTERVAL"
+    )
 
     # Token 最低成功率阈值
     token_min_success_rate: float = Field(default=0.7, alias="TOKEN_MIN_SUCCESS_RATE")
@@ -310,7 +334,9 @@ class Settings(BaseSettings):
             return "off"
         return v
 
-    @field_validator("admin_cookie_samesite", "user_cookie_samesite", "oauth_state_cookie_samesite")
+    @field_validator(
+        "admin_cookie_samesite", "user_cookie_samesite", "oauth_state_cookie_samesite"
+    )
     @classmethod
     def validate_cookie_samesite(cls, v: str) -> str:
         """验证 SameSite 值。"""
@@ -425,19 +451,24 @@ GITHUB_USER_URL: str = "https://api.github.com/user"
 # ==================================================================================================
 
 # 慢模型列表 - 这些模型需要更长的超时时间
-SLOW_MODELS: frozenset = frozenset({
-    "claude-opus-4-5",
-    "claude-opus-4-5-20251101",
-    "claude-3-opus",
-    "claude-3-opus-20240229",
-})
+SLOW_MODELS: frozenset = frozenset(
+    {
+        "claude-opus-4-5",
+        "claude-opus-4-5-20251101",
+        "claude-3-opus",
+        "claude-3-opus-20240229",
+    }
+)
 
 
 # ==================================================================================================
 # Kiro API URL Templates
 # ==================================================================================================
 
-KIRO_REFRESH_URL_TEMPLATE: str = "https://prod.{region}.auth.desktop.kiro.dev/refreshToken"
+KIRO_REFRESH_URL_TEMPLATE: str = (
+    "https://prod.{region}.auth.desktop.kiro.dev/refreshToken"
+)
+OIDC_TOKEN_URL_TEMPLATE: str = "https://oidc.{region}.amazonaws.com/token"
 KIRO_API_HOST_TEMPLATE: str = "https://codewhisperer.{region}.amazonaws.com"
 KIRO_Q_HOST_TEMPLATE: str = "https://q.{region}.amazonaws.com"
 
@@ -450,22 +481,17 @@ MODEL_MAPPING: Dict[str, str] = {
     # Claude Opus 4.5 - Top tier model
     "claude-opus-4-5": "claude-opus-4.5",
     "claude-opus-4-5-20251101": "claude-opus-4.5",
-
     # Claude Haiku 4.5 - Fast model
     "claude-haiku-4-5": "claude-haiku-4.5",
     "claude-haiku-4.5": "claude-haiku-4.5",
-
     # Claude Sonnet 4.5 - Enhanced model
     "claude-sonnet-4-5": "CLAUDE_SONNET_4_5_20250929_V1_0",
     "claude-sonnet-4-5-20250929": "CLAUDE_SONNET_4_5_20250929_V1_0",
-
     # Claude Sonnet 4 - Balanced model
     "claude-sonnet-4": "CLAUDE_SONNET_4_20250514_V1_0",
     "claude-sonnet-4-20250514": "CLAUDE_SONNET_4_20250514_V1_0",
-
     # Claude 3.7 Sonnet - Legacy model
     "claude-3-7-sonnet-20250219": "CLAUDE_3_7_SONNET_20250219_V1_0",
-
     # Convenience aliases
     "auto": "claude-sonnet-4.5",
 }
@@ -488,12 +514,19 @@ AVAILABLE_MODELS: List[str] = [
 
 APP_VERSION: str = "2.1.0"
 APP_TITLE: str = "KiroGate"
-APP_DESCRIPTION: str = "OpenAI & Anthropic compatible Kiro API gateway. Based on kiro-openai-gateway by Jwadow"
+APP_DESCRIPTION: str = (
+    "OpenAI & Anthropic compatible Kiro API gateway. Based on kiro-openai-gateway by Jwadow"
+)
 
 
 def get_kiro_refresh_url(region: str) -> str:
     """Return token refresh URL for specified region."""
     return KIRO_REFRESH_URL_TEMPLATE.format(region=region)
+
+
+def get_oidc_token_url(region: str) -> str:
+    """Return OIDC token URL for specified region."""
+    return OIDC_TOKEN_URL_TEMPLATE.format(region=region)
 
 
 def get_kiro_api_host(region: str) -> str:
