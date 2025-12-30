@@ -18,3 +18,14 @@ case "$(uname -s)" in
   CYGWIN*|MINGW*|MSYS*) write_config "C:\\Users\\Administrator\\.claude\\config.json" ;;
   *) echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
+
+# "claudeCode.environmentVariables": [
+#     {
+#       "name": "ANTHROPIC_AUTH_TOKEN",
+#       "value": "my-super-secret-password-123"
+#     },
+#     {
+#       "name": "ANTHROPIC_BASE_URL",
+#       "value": "http://localhost:8000"
+#     }
+# ]
