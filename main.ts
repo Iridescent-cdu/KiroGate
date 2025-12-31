@@ -23,7 +23,7 @@ interface Settings {
   refreshToken: string;
   profileArn: string;
   region: string;
-  kiroCredsFile: string;
+  ssoCacheDir: string;
   tokenRefreshThreshold: number;
   maxRetries: number;
   baseRetryDelay: number;
@@ -176,7 +176,7 @@ function loadSettings(): Settings {
     refreshToken: Deno.env.get("REFRESH_TOKEN") || "",
     profileArn: Deno.env.get("PROFILE_ARN") || "",
     region: Deno.env.get("KIRO_REGION") || "us-east-1",
-    kiroCredsFile: Deno.env.get("KIRO_CREDS_FILE") || "",
+    ssoCacheDir: Deno.env.get("SSO_CACHE_DIR") || "",
     tokenRefreshThreshold: parseInt(Deno.env.get("TOKEN_REFRESH_THRESHOLD") || "600"),
     maxRetries: parseInt(Deno.env.get("MAX_RETRIES") || "3"),
     baseRetryDelay: parseFloat(Deno.env.get("BASE_RETRY_DELAY") || "1.0"),
@@ -386,7 +386,7 @@ class KiroAuthManager {
     refreshToken: string,
     profileArn: string = "",
     region: string = "us-east-1",
-    credsFile: string = ""
+    ssoCacheDir: string = ""
   ) {
     this.refreshToken = refreshToken;
     this.profileArn = profileArn;
@@ -395,8 +395,8 @@ class KiroAuthManager {
     this._apiHost = getKiroApiHost(region);
     this._qHost = getKiroQHost(region);
 
-    if (credsFile) {
-      this.loadCredentialsFromFile(credsFile);
+    if (!this.refreshToken && ssoCacheDir) {
+      this.loadRefreshFromSsoCache(ssoCacheDir);
     }
   }
 
@@ -416,34 +416,43 @@ class KiroAuthManager {
     return this.profileArn;
   }
 
-  private async loadCredentialsFromFile(filePath: string) {
+  private async loadRefreshFromSsoCache(cacheDir: string) {
     try {
-      let data: Record<string, unknown>;
+      const base =
+        cacheDir || `${Deno.env.get("HOME") || "/home/appuser"}/.aws/sso/cache`;
 
-      if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
-        const response = await fetch(filePath);
-        data = await response.json();
-        logger.info(`Credentials loaded from URL: ${filePath}`);
-      } else {
-        const content = await Deno.readTextFile(filePath);
-        data = JSON.parse(content);
-        logger.info(`Credentials loaded from file: ${filePath}`);
+      // 优先固定文件名
+      const preferred = `${base}/kiro-auth-token.json`;
+      const candidates: string[] = [];
+      try {
+        const stat = await Deno.stat(preferred);
+        if (stat.isFile) candidates.push(preferred);
+      } catch (_e) {
+        // ignore
       }
 
-      if (data.refreshToken) this.refreshToken = data.refreshToken as string;
-      if (data.accessToken) this.accessToken = data.accessToken as string;
-      if (data.profileArn) this.profileArn = data.profileArn as string;
-      if (data.region) {
-        this.region = data.region as string;
-        this.refreshUrl = getKiroRefreshUrl(this.region);
-        this._apiHost = getKiroApiHost(this.region);
-        this._qHost = getKiroQHost(this.region);
+      for await (const entry of Deno.readDir(base)) {
+        if (entry.isFile && entry.name.endsWith(".json")) {
+          const p = `${base}/${entry.name}`;
+          if (p !== preferred) candidates.push(p);
+        }
       }
-      if (data.expiresAt) {
-        this.expiresAt = new Date(data.expiresAt as string);
+
+      for (const p of candidates) {
+        try {
+          const content = await Deno.readTextFile(p);
+          const data = JSON.parse(content) as Record<string, unknown>;
+          if (data.refreshToken) {
+            this.refreshToken = data.refreshToken as string;
+            logger.info(`Loaded refreshToken from ${p}`);
+            return;
+          }
+        } catch (err) {
+          logger.debug(`Skip cache file ${p}: ${err}`);
+        }
       }
     } catch (e) {
-      logger.error(`Error loading credentials: ${e}`);
+      logger.warning(`Failed to load refreshToken from SSO cache: ${e}`);
     }
   }
 
@@ -968,9 +977,9 @@ function convertAnthropicToOpenAI(request: AnthropicMessagesRequest): ChatComple
     const systemText = typeof request.system === "string"
       ? request.system
       : (request.system as ContentBlock[])
-          .filter(b => b.type === "text")
-          .map(b => b.text)
-          .join("\n");
+        .filter(b => b.type === "text")
+        .map(b => b.text)
+        .join("\n");
     if (systemText) {
       openaiMessages.push({ role: "system", content: systemText });
     }
@@ -2728,8 +2737,8 @@ PROFILE_ARN="arn:aws:..."                # Profile ARN (通常自动获取)
 PORT="8000"                               # 服务端口
 LOG_LEVEL="INFO"                          # 日志级别
 
-# 或使用凭证文件
-KIRO_CREDS_FILE="~/.kiro/credentials.json"</pre>
+# 或使用 SSO 缓存目录（默认 ~/.aws/sso/cache）
+SSO_CACHE_DIR="~/.aws/sso/cache"</pre>
 
         <div style="background: var(--bg-input); border: 1px solid var(--border);" class="p-4 rounded-lg mt-4">
           <p class="text-sm font-semibold mb-2" style="color: var(--text);">配置说明：</p>
@@ -3425,16 +3434,16 @@ let authManager: KiroAuthManager;
 
 async function main() {
   // 配置验证
-  if (!settings.refreshToken && !settings.kiroCredsFile) {
-    console.error("=" .repeat(60));
+  if (!settings.refreshToken && !settings.ssoCacheDir) {
+    console.error("=".repeat(60));
     console.error("  CONFIGURATION ERROR");
-    console.error("=" .repeat(60));
+    console.error("=".repeat(60));
     console.error("  No Kiro credentials configured!");
     console.error("");
     console.error("  Set one of:");
     console.error("    REFRESH_TOKEN=your_refresh_token");
-    console.error("    KIRO_CREDS_FILE=path/to/credentials.json");
-    console.error("=" .repeat(60));
+    console.error("    SSO_CACHE_DIR=path/to/.aws/sso/cache");
+    console.error("=".repeat(60));
     Deno.exit(1);
   }
 
@@ -3443,7 +3452,7 @@ async function main() {
     settings.refreshToken,
     settings.profileArn,
     settings.region,
-    settings.kiroCredsFile
+    settings.ssoCacheDir
   );
   await authManager.init();
 

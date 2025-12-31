@@ -76,10 +76,10 @@ class KiroAuthManager:
         refresh_token: Optional[str] = None,
         profile_arn: Optional[str] = None,
         region: str = "us-east-1",
-        creds_file: Optional[str] = None,
         oidc_client_id: Optional[str] = None,
         oidc_client_secret: Optional[str] = None,
         use_oidc_refresh: bool = True,
+        sso_cache_dir: Optional[str] = None,
     ):
         """
         Initialize authentication manager.
@@ -93,13 +93,16 @@ class KiroAuthManager:
         self._refresh_token = refresh_token
         self._profile_arn = profile_arn
         self._region = region
-        self._creds_file = creds_file
         self._oidc_client_id = oidc_client_id
         self._oidc_client_secret = oidc_client_secret
         self._oidc_token_url = get_oidc_token_url(region)
+        self._sso_cache_dir = sso_cache_dir
 
         if not (self._oidc_client_id and self._oidc_client_secret):
-            self._auto_load_oidc_client_from_cache()
+            self._auto_load_oidc_client_from_cache(self._sso_cache_dir)
+
+        if not self._refresh_token:
+            self._auto_load_refresh_from_sso_cache(self._sso_cache_dir)
 
         self._use_oidc_refresh = use_oidc_refresh and bool(
             self._oidc_client_id and self._oidc_client_secret
@@ -116,10 +119,6 @@ class KiroAuthManager:
 
         # Fingerprint for User-Agent
         self._fingerprint = get_machine_fingerprint()
-
-        # Load credentials from file if specified
-        if creds_file:
-            self._load_credentials_from_file(creds_file)
 
     @staticmethod
     def _is_url(path: str) -> bool:
@@ -191,57 +190,6 @@ class KiroAuthManager:
         except Exception as e:
             logger.error(f"Error loading credentials: {e}")
 
-    def _save_credentials_to_file(
-        self,
-        access_token: Optional[str] = None,
-        refresh_token: Optional[str] = None,
-        profile_arn: Optional[str] = None,
-    ) -> None:
-        """
-        Save updated credentials to JSON file.
-
-        Updates existing file, preserving other fields.
-
-        Args:
-            access_token: New access token (uses current if None)
-            refresh_token: New refresh token (uses current if None)
-            profile_arn: New profile ARN (uses current if None)
-        """
-        if not self._creds_file:
-            return
-
-        try:
-            path = Path(self._creds_file).expanduser()
-
-            # Read existing data
-            existing_data = {}
-            if path.exists():
-                with open(path, "r", encoding="utf-8") as f:
-                    existing_data = json.load(f)
-
-            # Update data with provided values or current values
-            existing_data["accessToken"] = (
-                access_token if access_token is not None else self._access_token
-            )
-            existing_data["refreshToken"] = (
-                refresh_token if refresh_token is not None else self._refresh_token
-            )
-            if self._expires_at:
-                existing_data["expiresAt"] = self._expires_at.isoformat()
-            if profile_arn is not None:
-                existing_data["profileArn"] = profile_arn
-            elif self._profile_arn:
-                existing_data["profileArn"] = self._profile_arn
-
-            # Save
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, indent=2, ensure_ascii=False)
-
-            logger.debug(f"Credentials saved to {self._creds_file}")
-
-        except Exception as e:
-            logger.error(f"Error saving credentials: {e}")
-
     def is_token_expiring_soon(self) -> bool:
         """
         Check if token is expiring soon.
@@ -286,7 +234,7 @@ class KiroAuthManager:
         preferring the most recently modified file.
         """
         try:
-            base_dir = Path(cache_dir) if cache_dir else Path.home() / ".aws/sso/cache"
+            base_dir = self._get_sso_cache_dir(cache_dir)
             if not base_dir.exists():
                 return
 
@@ -310,6 +258,81 @@ class KiroAuthManager:
                     logger.debug(f"Skip cache file {f}: {inner}")
         except Exception as e:
             logger.warning(f"Failed to auto load OIDC client from cache: {e}")
+
+    def _auto_load_refresh_from_sso_cache(
+        self, cache_dir: Optional[str] = None
+    ) -> None:
+        """
+        Load refreshToken from SSO cache (kiro-auth-token.json) if available.
+        """
+        try:
+            base_dir = (
+                Path(cache_dir).expanduser()
+                if cache_dir
+                else Path.home() / ".aws/sso/cache"
+            )
+            if not base_dir.exists():
+                return
+
+            preferred = base_dir / "kiro-auth-token.json"
+            candidates = []
+            if preferred.exists():
+                candidates.append(preferred)
+            candidates.extend(
+                sorted(
+                    (p for p in base_dir.glob("*.json") if p != preferred),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+            )
+
+            for f in candidates:
+                try:
+                    with open(f, "r", encoding="utf-8") as fp:
+                        data = json.load(fp)
+                    rt = data.get("refreshToken")
+                    if rt:
+                        self._refresh_token = rt
+                        logger.info(f"Loaded refreshToken from {f}")
+                        return
+                except Exception as inner:
+                    logger.debug(f"Skip cache file {f}: {inner}")
+        except Exception as e:
+            logger.warning(f"Failed to load refreshToken from SSO cache: {e}")
+
+    def _persist_tokens_to_sso_cache(self) -> None:
+        """
+        Persist refreshed tokens to SSO cache file (kiro-auth-token.json).
+        """
+        try:
+            base_dir = self._get_sso_cache_dir(self._sso_cache_dir)
+            base_dir.mkdir(parents=True, exist_ok=True)
+            file_path = base_dir / "kiro-auth-token.json"
+
+            data = {
+                "refreshToken": self._refresh_token,
+                "accessToken": self._access_token,
+                "profileArn": self._profile_arn,
+                "region": self._region,
+                "expiresAt": self._expires_at.isoformat() if self._expires_at else None,
+            }
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            logger.debug(f"Persisted tokens to {file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to persist tokens to SSO cache: {e}")
+
+    def _get_sso_cache_dir(self, cache_dir: Optional[str] = None) -> Path:
+        """
+        Resolve SSO cache directory.
+        """
+        return (
+            Path(cache_dir).expanduser()
+            if cache_dir
+            else Path.home() / ".aws/sso/cache"
+        )
 
     async def _refresh_token_request_kiro(self) -> dict:
         """Refresh via Kiro refreshToken endpoint."""
@@ -426,16 +449,15 @@ class KiroAuthManager:
             now.timestamp() + expires_in - 60, tz=timezone.utc
         )
 
-        self._save_credentials_to_file(
-            new_access_token, new_refresh_token, new_profile_arn
-        )
-
         self._access_token = new_access_token
         if new_refresh_token:
             self._refresh_token = new_refresh_token
         if new_profile_arn:
             self._profile_arn = new_profile_arn
         self._expires_at = new_expires_at
+
+        # 持久化到 SSO 缓存（如果可写）
+        self._persist_tokens_to_sso_cache()
 
         logger.info(f"Token refreshed, expires: {self._expires_at.isoformat()}")
 

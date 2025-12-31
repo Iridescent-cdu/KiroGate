@@ -21,9 +21,8 @@ services:
       # 方式一: 使用 refresh token (推荐用于 Docker)
       - REFRESH_TOKEN=${REFRESH_TOKEN:-}
 
-      # 方式二: 挂载凭证文件 (见下方 volumes)
-      - KIRO_CREDS_FILE=/app/credentials.json
-
+      # 方式二: 使用 SSO 缓存自动加载 (推荐)
+      - SSO_CACHE_DIR=/app/sso/cache
       # 可选配置
       - PROFILE_ARN=${PROFILE_ARN:-}
       - KIRO_REGION=${KIRO_REGION:-us-east-1}
@@ -55,9 +54,8 @@ services:
     volumes:
       # 持久化统计数据
       - ./data:/app/data
-      # 如果使用凭证文件，取消下面的注释
-      - ~/.aws/sso/cache/kiro-auth-token.json:/app/credentials.json:ro
-      # 然后设置 KIRO_CREDS_FILE=/app/credentials.json
+      # 挂载 AWS SSO 缓存目录，供 OIDC 自动读取 clientId/secret/refresh_token
+      - ~/.aws/sso/cache:/app/sso/cache
 
     healthcheck:
       test:

@@ -1555,8 +1555,8 @@ KIRO_REGION="us-east-1"                  # AWS 区域
 PROFILE_ARN="arn:aws:..."                # Profile ARN
 LOG_LEVEL="INFO"                          # 日志级别
 
-# 或使用凭证文件
-KIRO_CREDS_FILE="~/.kiro/credentials.json"</pre>
+# 或使用 SSO 缓存目录（默认 ~/.aws/sso/cache）
+SSO_CACHE_DIR="~/.aws/sso/cache"</pre>
 
         <div class="p-4 rounded-xl mt-4" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); border: 1px solid rgba(99, 102, 241, 0.2);">
           <p class="text-sm font-semibold mb-2" style="color: var(--text);">💡 配置说明</p>

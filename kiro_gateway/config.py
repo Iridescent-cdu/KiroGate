@@ -107,8 +107,8 @@ class Settings(BaseSettings):
     # AWS 区域（默认 us-east-1）
     region: str = Field(default="us-east-1", alias="KIRO_REGION")
 
-    # 凭证文件路径（可选，作为 .env 的替代）
-    kiro_creds_file: str = Field(default="", alias="KIRO_CREDS_FILE")
+    # AWS SSO 缓存目录（可选，不填则使用 HOME/.aws/sso/cache）
+    sso_cache_dir: str = Field(default="", alias="SSO_CACHE_DIR")
 
     # OIDC 认证（AWS SSO）配置
     oidc_client_id: str = Field(default="", alias="OIDC_CLIENT_ID")
@@ -383,11 +383,6 @@ class Settings(BaseSettings):
 # Global settings instance
 settings = Settings()
 
-# Handle KIRO_CREDS_FILE Windows path issue
-_raw_creds_file = _get_raw_env_value("KIRO_CREDS_FILE") or settings.kiro_creds_file
-if _raw_creds_file:
-    settings.kiro_creds_file = str(Path(_raw_creds_file))
-
 # ==================================================================================================
 # Backward-compatible exports (DEPRECATED - only kept for tests and external compatibility)
 # WARNING: These constants are deprecated. Use `settings.xxx` directly in new code.
@@ -397,7 +392,6 @@ PROXY_API_KEY: str = settings.proxy_api_key
 REFRESH_TOKEN: str = settings.refresh_token
 PROFILE_ARN: str = settings.profile_arn
 REGION: str = settings.region
-KIRO_CREDS_FILE: str = settings.kiro_creds_file
 TOKEN_REFRESH_THRESHOLD: int = settings.token_refresh_threshold
 MAX_RETRIES: int = settings.max_retries
 BASE_RETRY_DELAY: float = settings.base_retry_delay

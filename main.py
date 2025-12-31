@@ -127,7 +127,7 @@ def validate_configuration() -> None:
     验证所需配置是否存在。
 
     支持两种认证模式：
-    1. 简单模式：需要配置 REFRESH_TOKEN 或 KIRO_CREDS_FILE
+    1. 简单模式：需要配置 REFRESH_TOKEN，或提供可读的 SSO 缓存目录
     2. 组合模式：只需配置 PROXY_API_KEY，REFRESH_TOKEN 由用户在请求中传递
 
     Raises:
@@ -146,16 +146,12 @@ def validate_configuration() -> None:
 
     # 检查凭证配置
     has_refresh_token = bool(settings.refresh_token)
-    has_creds_file = bool(settings.kiro_creds_file)
-
-    # 检查凭证文件是否实际存在（URL 跳过本地路径检查）
-    if settings.kiro_creds_file:
-        is_url = settings.kiro_creds_file.startswith(("http://", "https://"))
-        if not is_url:
-            creds_path = Path(settings.kiro_creds_file).expanduser()
-            if not creds_path.exists():
-                has_creds_file = False
-                logger.warning(f"KIRO_CREDS_FILE not found: {settings.kiro_creds_file}")
+    sso_cache_dir = (
+        Path(settings.sso_cache_dir).expanduser()
+        if settings.sso_cache_dir
+        else Path.home() / ".aws/sso/cache"
+    )
+    has_sso_cache = sso_cache_dir.exists()
 
     # 打印错误并退出（如果有）
     if errors:
@@ -175,19 +171,12 @@ def validate_configuration() -> None:
         "environment variables" if not Path(".env").exists() else ".env file"
     )
 
-    if has_refresh_token or has_creds_file:
-        # 简单模式：服务器配置了 REFRESH_TOKEN
-        if settings.kiro_creds_file:
-            if settings.kiro_creds_file.startswith(("http://", "https://")):
-                logger.info(
-                    f"Using credentials from URL: {settings.kiro_creds_file} (via {config_source})"
-                )
-            else:
-                logger.info(
-                    f"Using credentials file: {settings.kiro_creds_file} (via {config_source})"
-                )
-        elif settings.refresh_token:
+    if has_refresh_token or has_sso_cache:
+        # 简单模式：服务器配置了 REFRESH_TOKEN 或有可读的 SSO 缓存
+        if settings.refresh_token:
             logger.info(f"Using refresh token (via {config_source})")
+        elif has_sso_cache:
+            logger.info(f"Using SSO cache at {sso_cache_dir} (via {config_source})")
         logger.info(
             "Auth mode: Simple mode (server-configured REFRESH_TOKEN) + Multi-tenant mode supported"
         )
@@ -222,8 +211,10 @@ async def lifespan(app: FastAPI):
     debug_dir.mkdir(parents=True, exist_ok=True)
 
     # 检查是否配置了全局凭证
-    has_global_credentials = bool(settings.refresh_token) or bool(
-        settings.kiro_creds_file
+    has_global_credentials = bool(settings.refresh_token) or (
+        Path(settings.sso_cache_dir).expanduser().exists()
+        if settings.sso_cache_dir
+        else (Path.home() / ".aws/sso/cache").exists()
     )
 
     # 创建全局 AuthManager（简单模式使用）
@@ -231,10 +222,10 @@ async def lifespan(app: FastAPI):
         refresh_token=settings.refresh_token,
         profile_arn=settings.profile_arn,
         region=settings.region,
-        creds_file=settings.kiro_creds_file if settings.kiro_creds_file else None,
         oidc_client_id=settings.oidc_client_id,
         oidc_client_secret=settings.oidc_client_secret,
         use_oidc_refresh=True,
+        sso_cache_dir=settings.sso_cache_dir or None,
     )
     app.state.auth_manager = auth_manager
 
