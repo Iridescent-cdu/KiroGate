@@ -433,27 +433,28 @@ def build_kiro_payload(
 ) -> dict:
     """
     Строит полный payload для Kiro API.
-    
+
     Включает:
     - Полную историю сообщений
     - System prompt (добавляется к первому user сообщению)
     - Tools definitions (с обработкой длинных descriptions)
     - Текущее сообщение
-    
+
     Если tools содержат слишком длинные descriptions, они автоматически
     переносятся в system prompt, а в tool остаётся ссылка на документацию.
-    
+
     Args:
         request_data: Запрос в формате OpenAI
         conversation_id: Уникальный ID разговора
         profile_arn: ARN профиля AWS CodeWhisperer
-    
+
     Returns:
         Словарь payload для POST запроса к Kiro API
-    
+
     Raises:
         ValueError: Если нет сообщений для отправки
     """
+
     messages = list(request_data.messages)
 
     # 使用辅助函数提取 system prompt 和处理 tools（代码简化）
@@ -527,15 +528,21 @@ def build_kiro_payload(
             }
         }
     }
-    
+
     # Добавляем историю только если она не пуста
     if history:
         payload["conversationState"]["history"] = history
-    
+
     # Добавляем profileArn
     if profile_arn:
         payload["profileArn"] = profile_arn
-    
+
+    # Log final Kiro payload
+    try:
+        logger.info(f"[build_kiro_payload] Final Kiro payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+    except Exception as e:
+        logger.warning(f"[build_kiro_payload] Failed to log Kiro payload: {e}")
+
     return payload
 
 
@@ -829,6 +836,7 @@ def convert_anthropic_to_openai_request(
     Returns:
         Запрос в формате OpenAI
     """
+
     # Конвертируем сообщения
     openai_messages = convert_anthropic_messages_to_openai(
         anthropic_request.messages,
@@ -855,7 +863,7 @@ def convert_anthropic_to_openai_request(
     # Конвертируем stop_sequences -> stop
     stop = anthropic_request.stop_sequences
 
-    return ChatCompletionRequest(
+    openai_request = ChatCompletionRequest(
         model=anthropic_request.model,
         messages=openai_messages,
         max_tokens=anthropic_request.max_tokens,
@@ -866,3 +874,6 @@ def convert_anthropic_to_openai_request(
         tool_choice=openai_tool_choice,
         stream=anthropic_request.stream
     )
+
+
+    return openai_request

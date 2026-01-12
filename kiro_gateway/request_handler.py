@@ -396,6 +396,10 @@ class RequestHandler:
             **kwargs
         )
 
+        # 记录响应体
+        if debug_logger:
+            debug_logger.log_response_body(collected_response)
+
         await http_client.close()
         RequestHandler.log_success(endpoint_name, is_streaming=False)
 
